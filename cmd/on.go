@@ -9,6 +9,7 @@ import (
 	"github.com/bigmuramura/awsConfigToggle/mypkg"
 	"github.com/cheggaaa/pb/v3"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 )
 
 // onCmd represents the on command
@@ -42,19 +43,28 @@ func enbabledAWSConfig() (string, error) {
 	bar := pb.Simple.Start(count)
 	bar.SetMaxWidth(80)
 
+	// 並列処理を開始
+	eg := errgroup.Group{}
 	for _, region := range allRegions {
-		bar.Increment()
-		svc := configservice.New(
-			sess,
-			aws.NewConfig().WithRegion(region))
+		region := region
+		eg.Go(func() error {
+			bar.Increment()
+			svc := configservice.New(
+				sess,
+				aws.NewConfig().WithRegion(region))
 
-		input := &configservice.StartConfigurationRecorderInput{
-			ConfigurationRecorderName: aws.String(RECORDERNAME),
-		}
-		_, err := svc.StartConfigurationRecorder(input)
-		if err != nil {
-			return "Failed.", err
-		}
+			input := &configservice.StartConfigurationRecorderInput{
+				ConfigurationRecorderName: aws.String(RECORDERNAME),
+			}
+			_, err := svc.StartConfigurationRecorder(input)
+			if err != nil {
+				return err
+			}
+			return nil
+		})
+	}
+	if err := eg.Wait(); err != nil {
+		return "Failed", err
 	}
 	bar.Finish()
 	return "Suceed.", nil

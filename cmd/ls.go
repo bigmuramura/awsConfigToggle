@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"sync"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -13,6 +14,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 )
 
 type ConfigStatus struct {
@@ -36,19 +38,34 @@ var lsCmd = &cobra.Command{
 		bar.SetMaxWidth(80)
 
 		sess := session.Must(session.NewSession())
+
+		// 並列処理開始
+		eg := errgroup.Group{}
+		mutex := sync.Mutex{}
 		for _, region := range allRegions {
-			bar.Increment()
-			svc := configservice.New(
-				sess,
-				aws.NewConfig().WithRegion(region))
+			region := region
 
-			input := &configservice.DescribeConfigurationRecorderStatusInput{}
+			eg.Go(func() error {
+				bar.Increment()
+				svc := configservice.New(
+					sess,
+					aws.NewConfig().WithRegion(region))
 
-			result, err := svc.DescribeConfigurationRecorderStatus(input)
-			if err != nil {
-				fmt.Println(err)
-			}
-			configStatusList = append(configStatusList, ConfigStatus{region, *result.ConfigurationRecordersStatus[0].Recording})
+				input := &configservice.DescribeConfigurationRecorderStatusInput{}
+
+				result, err := svc.DescribeConfigurationRecorderStatus(input)
+				if err != nil {
+					return err
+				}
+				mutex.Lock()
+				configStatusList = append(configStatusList, ConfigStatus{region, *result.ConfigurationRecordersStatus[0].Recording})
+				mutex.Unlock()
+				return nil
+			})
+		}
+		if err := eg.Wait(); err != nil {
+			fmt.Println(err)
+			return
 		}
 
 		// リージョン名でソート
