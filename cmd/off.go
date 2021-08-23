@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -34,7 +35,11 @@ func init() {
 
 func disabledAWSConfig() (string, error) {
 	const RECORDERNAME = "default"
-	allRegions := mypkg.FetchAllRegions()
+	allRegions, err := mypkg.FetchAllRegions()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 	sess := session.Must(session.NewSession())
 
 	// Progress Bar

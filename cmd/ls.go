@@ -29,7 +29,11 @@ var lsCmd = &cobra.Command{
 	Long:  `Shows the recorder status of AWS Config for all regions.`,
 
 	Run: func(cmd *cobra.Command, args []string) {
-		allRegions := mypkg.FetchAllRegions()
+		allRegions, err := mypkg.FetchAllRegions()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
 		configStatusList := make([]ConfigStatus, 0)
 
 		// Progress Bar
