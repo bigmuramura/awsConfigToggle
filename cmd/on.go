@@ -8,7 +8,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/configservice"
 	"github.com/bigmuramura/awsConfigToggle/mypkg"
-	"github.com/cheggaaa/pb/v3"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 )
@@ -20,15 +19,23 @@ var onCmd = &cobra.Command{
 	Long:  `Enabled the recorder status of AWS Config for all regions.`,
 
 	Run: func(cmd *cobra.Command, args []string) {
-		res, err := enbabledAWSConfig()
+		_, err := enbabledAWSConfig()
 		if err != nil {
 			fmt.Println(err)
+			os.Exit(1)
 		}
-		fmt.Println(res)
+		if listFlag {
+			_, err := mypkg.ShowConfigStatus()
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+		}
 	},
 }
 
 func init() {
+	onCmd.Flags().BoolVarP(&listFlag, "verbose", "v", false, "Status display after execution.")
 	rootCmd.AddCommand(onCmd)
 
 }
@@ -43,17 +50,11 @@ func enbabledAWSConfig() (string, error) {
 	}
 	sess := session.Must(session.NewSession())
 
-	// Progress Bar
-	count := len(allRegions)
-	bar := pb.Simple.Start(count)
-	bar.SetMaxWidth(80)
-
 	// 並列処理を開始
 	eg := errgroup.Group{}
 	for _, region := range allRegions {
 		region := region
 		eg.Go(func() error {
-			bar.Increment()
 			svc := configservice.New(
 				sess,
 				aws.NewConfig().WithRegion(region))
@@ -71,7 +72,6 @@ func enbabledAWSConfig() (string, error) {
 	if err := eg.Wait(); err != nil {
 		return "Failed", err
 	}
-	bar.Finish()
 	return "Suceed.", nil
 
 }
