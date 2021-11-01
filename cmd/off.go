@@ -2,15 +2,18 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/configservice"
 	"github.com/bigmuramura/awsConfigToggle/mypkg"
-	"github.com/cheggaaa/pb/v3"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 )
+
+// Flags
+var listFlag bool
 
 // offCmd represents the off command
 var offCmd = &cobra.Command{
@@ -19,28 +22,35 @@ var offCmd = &cobra.Command{
 	Long:  `Disabled the recorder status of AWS Config for all regions.`,
 
 	Run: func(cmd *cobra.Command, args []string) {
-		res, err := disabledAWSConfig()
+		_, err := disabledAWSConfig()
 		if err != nil {
 			fmt.Println(err)
+			os.Exit(1)
 		}
-		fmt.Println(res)
+		if listFlag {
+			_, err := mypkg.ShowConfigStatus()
+			if err != nil {
+				fmt.Println(err)
+			}
+		}
 	},
 }
 
 func init() {
+	// フラグ設定
+	offCmd.Flags().BoolVarP(&listFlag, "verbose", "v", false, "Status display after execution.")
 	rootCmd.AddCommand(offCmd)
 
 }
 
 func disabledAWSConfig() (string, error) {
 	const RECORDERNAME = "default"
-	allRegions := mypkg.FetchAllRegions()
+	allRegions, err := mypkg.FetchAllRegions()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 	sess := session.Must(session.NewSession())
-
-	// Progress Bar
-	count := len(allRegions)
-	bar := pb.Simple.Start(count)
-	bar.SetMaxWidth(80)
 
 	// 並列処理を開始
 	eg := errgroup.Group{}
@@ -48,7 +58,6 @@ func disabledAWSConfig() (string, error) {
 		region := region
 
 		eg.Go(func() error {
-			bar.Increment()
 			svc := configservice.New(
 				sess,
 				aws.NewConfig().WithRegion(region))
@@ -66,6 +75,5 @@ func disabledAWSConfig() (string, error) {
 	if err := eg.Wait(); err != nil {
 		return "Failed", err
 	}
-	bar.Finish()
 	return "Suceed.", nil
 }
